@@ -182,12 +182,12 @@ def admin():
 @app.route("/")
 def getLogin():
     # Get config from database instead of global variables
-    cur = g.db
-    config = cur.execute("SELECT * FROM socialfish WHERE id = 1").fetchone()
+    conn = g.db
+    config = conn.execute("SELECT * FROM socialfish WHERE id = 1").fetchone()
     # Retrieve status and URL from config or use defaults
-    cur.execute("SELECT url, status, beef FROM config LIMIT 1")
+    cur = conn.execute("SELECT status, url, beef FROM config LIMIT 1")
     conf_row = cur.fetchone()
-    
+
     if conf_row:
         sta, url, beef = conf_row[0], conf_row[1], conf_row[2]
     else:
