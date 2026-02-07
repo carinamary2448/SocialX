@@ -23,6 +23,6 @@ def clone(url, user_agent, beef):
         new_html = open(temp_ind_path, 'w')
         new_html.write(html.encode('ascii', 'ignore').decode('ascii'))
         new_html.close()
-    except:
-        pass
+    except (requests.RequestException, OSError, IOError) as e:
+        print(f'[-] Clone failed: {str(e)}')
 #--------------------------------------------------------------------------------------------------------------------

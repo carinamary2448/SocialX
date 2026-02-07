@@ -18,6 +18,6 @@ def sendMail(subject, email, password, recipient, body, smtp, port):
 		server.sendmail(email, recipient, text)
 		server.quit()
 		return 'ok'
-	except Exception as err:
-		pass	
-		return err
+	except (smtplib.SMTPException, ConnectionError) as err:
+		print(f'[-] Mail error: {str(err)}')
+		return str(err)

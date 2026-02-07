@@ -18,10 +18,15 @@ def generate_report(DATABASE, cpm):
     _cURL = cpm
     choose_url = 'http' if _cURL == 'All' else _cURL
     result_query = []
-    for row in cursor.execute('SELECT * FROM creds WHERE url GLOB "*{}*"'.format(choose_url)):
-        result_query += row
+    # Use LIKE with proper parameterization instead of GLOB with string formatting
+    query_pattern = '%' + choose_url + '%'
+    for row in cursor.execute('SELECT * FROM creds WHERE url LIKE ?', (query_pattern,)):
+        result_query += list(row)
         
-    result_count = cursor.execute('SELECT COUNT(*) FROM creds WHERE url GLOB "*{}*"'.format(choose_url)).fetchone()
+    result_count = cursor.execute('SELECT COUNT(*) FROM creds WHERE url LIKE ?', (query_pattern,)).fetchone()
+    
+    conex.close()
+    return result_query, result_count
     
     return result_query, result_count
 
