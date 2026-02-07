@@ -66,19 +66,20 @@ def teardown_request(exception):
         g.db.close()
 
 # Ensure `socialfish` table has a default row and provide safe getters
-def ensure_socialfish_row(cur):
+def ensure_socialfish_row(conn):
     try:
-        cur.execute("""CREATE TABLE IF NOT EXISTS socialfish (
+        # `conn` may be a sqlite3.Connection; use its execute which returns a cursor
+        conn.execute("""CREATE TABLE IF NOT EXISTS socialfish (
                                             id integer PRIMARY KEY,
                                             clicks integer,
                                             attacks integer,
                                             token text
                                         ); """)
-        cur.execute("SELECT id FROM socialfish WHERE id = 1")
+        cur = conn.execute("SELECT id FROM socialfish WHERE id = 1")
         if cur.fetchone() is None:
             t = genToken()
-            cur.execute('INSERT INTO socialfish(id,clicks,attacks,token) VALUES(?,?,?,?)', (1, 0, 0, t))
-            g.db.commit()
+            conn.execute('INSERT INTO socialfish(id,clicks,attacks,token) VALUES(?,?,?,?)', (1, 0, 0, t))
+            conn.commit()
     except Exception as e:
         print(f'[-] ensure_socialfish_row error: {e}')
 
