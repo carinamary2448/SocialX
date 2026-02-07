@@ -20,7 +20,7 @@ from core.cookie_inspector import CookieInspector
 from core.recorder_selenium import SeleniumRecorder
 from core.mock_server import MockLoginServer
 from core.advanced_attacks import TabJacking, FileUploadInjection, AdvancedStealth, CAPTCHASolver
-from datetime import date
+from datetime import date, datetime
 from sys import argv, exit, version_info
 import colorama
 import sqlite3
@@ -29,7 +29,12 @@ import os
 import json
 import hashlib
 import asyncio
+import logging
 from pathlib import Path
+
+# Configure logging
+logger = logging.getLogger("SocialFish")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 # Verificar argumentos
 if len(argv) < 2:
@@ -1233,6 +1238,18 @@ def mock_server_start():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # Recording Studio - Choose recorder type
+def emit_recording_log(event_type, message, **kwargs):
+    """Emit recording events to connected clients via WebSocket"""
+    try:
+        socketio.emit(event_type, {
+            'message': message,
+            'type': event_type,
+            'timestamp': datetime.datetime.now().isoformat(),
+            **kwargs
+        }, broadcast=False)
+    except Exception as e:
+        logger.debug(f"Failed to emit WebSocket event {event_type}: {e}")
+
 @app.route("/studio/recorder", methods=['GET', 'POST'])
 @flask_login.login_required
 def recording_studio():
@@ -1252,13 +1269,19 @@ def recording_studio():
     
     try:
         if recorder_type == 'selenium':
+            emit_recording_log('recorder_log', f"Initializing Selenium recorder ({browser})")
             recorder = SeleniumRecorder(browser=browser, headless=headless)
             recorder.init_driver()
+            emit_recording_log('recorder_log', "Browser driver initialized")
             success = recorder.record_flow(target_url)
+            emit_recording_log('recorder_log', f"Recording completed (found {len(recorder.detected_forms or [])} forms)")
         else:
             # Default Playwright
+            emit_recording_log('recorder_log', "Initializing Playwright recorder")
             recorder = PlaywrightRecorder(DATABASE, headless=headless)
+            emit_recording_log('recorder_log', "Launching browser instance")
             success = asyncio.run(recorder.record_flow(target_url))
+            emit_recording_log('recorder_log', f"Recording completed (found {len(recorder.detected_forms or [])} forms)")
         
         return jsonify({
             'status': 'ok',
@@ -1266,6 +1289,8 @@ def recording_studio():
             'message': f'Recording started with {recorder_type}'
         })
     except Exception as e:
+        emit_recording_log('recording_error', str(e))
+        logger.exception(f"Recording error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # Attack Payloads Dashboard

@@ -8,9 +8,13 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+import logging
+
+logger = logging.getLogger("setup")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 def print_banner():
-    print("""
+    logger.info("""
     ╔═══════════════════════════════════════════╗
     ║     SocialFish v3.0 Setup Wizard          ║
     ║     Modern Dynamic Phishing Toolkit       ║
@@ -20,13 +24,13 @@ def print_banner():
 def check_python():
     """Verify Python 3.8+"""
     if sys.version_info < (3, 8):
-        print("[-] Python 3.8+ required")
+        logger.error("Python 3.8+ required")
         exit(1)
-    print(f"[+] Python {sys.version.split()[0]} ✓")
+    logger.info(f"Python {sys.version.split()[0]} ✓")
 
 def install_dependencies():
     """Install required packages"""
-    print("\n[*] Installing dependencies...")
+    logger.info("\n[*] Installing dependencies...")
     
     deps = [
         'flask==2.3.3',
@@ -43,45 +47,45 @@ def install_dependencies():
     for dep in deps:
         try:
             __import__(dep.split('>=')[0].split('==')[0].replace('-', '_'))
-            print(f"[+] {dep.split('>=')[0]} already installed")
+            logger.info(f"[+] {dep.split('>=')[0]} already installed")
         except ImportError:
-            print(f"[*] Installing {dep}...")
+            logger.info(f"[*] Installing {dep}...")
             subprocess.run([sys.executable, '-m', 'pip', 'install', dep], check=True)
     
-    print("[+] All dependencies installed ✓")
+    logger.info("[+] All dependencies installed ✓")
 
 def install_playwright_browsers():
     """Install Playwright browsers"""
-    print("\n[*] Installing Playwright browsers...")
-    print("    (This may take a few minutes)")
+    logger.info("\n[*] Installing Playwright browsers...")
+    logger.info("    (This may take a few minutes)")
     
     try:
         from playwright.sync_api import sync_playwright
         subprocess.run([sys.executable, '-m', 'playwright', 'install', 'chromium'], check=True)
-        print("[+] Chromium browser installed ✓")
+        logger.info("[+] Chromium browser installed ✓")
     except Exception as e:
-        print(f"[-] Failed to install Playwright browsers: {e}")
-        print("[!] You can manually run: playwright install chromium")
+        logger.exception("Failed to install Playwright browsers: %s", e)
+        logger.warning("You can manually run: playwright install chromium")
 
 def initialize_database():
     """Initialize database schema"""
-    print("\n[*] Initializing database...")
+    logger.info("\n[*] Initializing database...")
     
     try:
         from core.db_migration import migrate_db
         db_path = os.getenv("DATABASE", "./database.db")
         migrate_db(db_path)
-        print(f"[+] Database initialized: {db_path} ✓")
+        logger.info(f"[+] Database initialized: {db_path} ✓")
     except Exception as e:
-        print(f"[-] Database initialization failed: {e}")
+        logger.exception("Database initialization failed: %s", e)
         return False
     
     return True
 
 def setup_tunneling():
     """Interactive tunnel setup"""
-    print("\n[*] Tunnel Setup (Optional)")
-    print("You can setup tunneling now or skip for local testing.")
+    logger.info("\n[*] Tunnel Setup (Optional)")
+    logger.info("You can setup tunneling now or skip for local testing.")
     
     choice = input("\nSetup tunneling? (ngrok/cloudflared/skip) [skip]: ").strip().lower()
     
@@ -90,18 +94,18 @@ def setup_tunneling():
             from core.tunnel_manager import TunnelManager
             manager = TunnelManager()
             manager.interactive_setup()
-            print("[+] Tunnel configured ✓")
+            logger.info("[+] Tunnel configured ✓")
         except Exception as e:
-            print(f"[-] Tunnel setup failed: {e}")
+            logger.exception("Tunnel setup failed: %s", e)
     else:
-        print("[!] Using localhost only. You can setup tunneling later with:")
-        print("    python core/tunnel_manager.py setup")
+        logger.warning("Using localhost only. You can setup tunneling later with:")
+        logger.warning("    python core/tunnel_manager.py setup")
 
 def generate_config():
     """Create .env file if needed"""
     env_file = Path(".env")
     if not env_file.exists():
-        print("\n[*] Creating .env configuration...")
+        logger.info("\n[*] Creating .env configuration...")
         env_content = """# SocialFish v3.0 Configuration
 DATABASE=./database.db
 FLASK_ENV=development
@@ -116,11 +120,11 @@ CLOUDFLARED_TOKEN=
 WEBHOOK_TIMEOUT=5
 """
         env_file.write_text(env_content)
-        print("[+] .env file created (configure as needed) ✓")
+        logger.info("[+] .env file created (configure as needed) ✓")
 
 def print_next_steps():
     """Print quick-start guide"""
-    print("""
+    logger.info("""
 ╔═══════════════════════════════════════════╗
 ║        Setup Complete! Next Steps:        ║
 ╚═══════════════════════════════════════════╝
@@ -170,14 +174,11 @@ def main():
             generate_config()
             print_next_steps()
         else:
-            print("[-] Setup incomplete. Try manual database setup:")
-            print("    python core/db_migration.py")
+            logger.error("Setup incomplete. Try manual database setup:")
+            logger.error("    python core/db_migration.py")
     except KeyboardInterrupt:
-        print("\n[-] Setup cancelled")
+        logger.warning("Setup cancelled")
         exit(1)
     except Exception as e:
-        print(f"\n[-] Setup error: {e}")
+        logger.exception("Setup error: %s", e)
         exit(1)
-
-if __name__ == "__main__":
-    main()
