@@ -70,5 +70,21 @@ def initDB(DATABASE):
                                         ); """
         cur.execute(create_table_sql5)
         conn.commit()
+        # Configuration table for runtime settings (used by SocialFish)
+        create_table_sql6 = """ CREATE TABLE IF NOT EXISTS config (
+                                            id integer PRIMARY KEY,
+                                            url text,
+                                            red text,
+                                            status text,
+                                            beef text
+                                        ); """
+        cur.execute(create_table_sql6)
+        conn.commit()
+        # Insert default config row if not present
+        cur.execute("SELECT COUNT(*) FROM config")
+        if cur.fetchone()[0] == 0:
+            cur.execute('INSERT INTO config(id, url, red, status, beef) VALUES(?, ?, ?, ?, ?)',
+                        (1, 'https://github.com/UndeadSec/SocialFish', 'https://github.com/UndeadSec/SocialFish', 'custom', 'no'))
+            conn.commit()
         conn.close()
         genQRCode(t)
