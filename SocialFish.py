@@ -1447,12 +1447,18 @@ def webhook_handler():
     print(f"[+] Webhook data received from {victim_ip}: {webhook_type}")
     
     # Broadcast to admin panel via WebSocket
-    socketio.emit('webhook_data', {
+    # Avoid passing `broadcast` keyword directly to ensure compatibility
+    payload = {
         'type': webhook_type,
         'victim_ip': victim_ip,
         'data': data,
         'timestamp': date.today().isoformat()
-    }, broadcast=True)
+    }
+    try:
+        socketio.emit('webhook_data', payload)
+    except TypeError:
+        # Fallback for older/newer server implementations
+        socketio.server.emit('webhook_data', payload)
     
     return jsonify({'status': 'ok'})
 
