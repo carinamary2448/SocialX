@@ -60,6 +60,16 @@ def migrate_db(database_path):
             id INTEGER PRIMARY KEY,
             email VARCHAR,
             name TEXT,
+
+        # Config table - stores site mode and clone URL settings
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS config (
+                id INTEGER PRIMARY KEY,
+                url TEXT,
+                status TEXT,
+                beef TEXT
+            )
+        """)
             obs TEXT
         )
     """)
