@@ -103,6 +103,18 @@
                                 <dd class="col-sm-8" id="detailCookies">-</dd>
                             </dl>
                         </div>
+
+                        <!-- Live Log Panel -->
+                        <div id="liveLogPanel" class="mt-4">
+                            <h6><i class="mdi mdi-file-document-outline"></i> Live Activity Log</h6>
+                            <div id="liveLog" style="height: 300px; overflow-y: auto; background: #1a1a1a; color: #0f0; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.85em; border: 1px solid #444;">
+                                <small class="text-muted">[*] Initializing recorder...</small>
+                            </div>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="clearLiveLog()">Clear Log</button>
+                                <button class="btn btn-sm btn-outline-info" onclick="pauseAutoScroll()">Pause</button>
+                            </div>
+                        </div>
                     </div>
 
                 </div>
@@ -206,6 +218,87 @@
 </style>
 
 <script>
+let autoScrollEnabled = true;
+
+function appendLog(message, type = 'info') {
+    const liveLog = document.getElementById('liveLog');
+    const timestamp = new Date().toLocaleTimeString();
+    const prefix = {
+        'info': '[*]',
+        'success': '[+]',
+        'warning': '[!]',
+        'error': '[-]',
+        'network': '[N]',
+        'form': '[F]',
+        'payload': '[P]',
+        'cookie': '[C]'
+    }[type] || '[*]';
+    
+    const colors = {
+        'info': '#0f0',
+        'success': '#0f0',
+        'warning': '#ff0',
+        'error': '#f00',
+        'network': '#0ff',
+        'form': '#f0f',
+        'payload': '#f80',
+        'cookie': '#0f8'
+    }[type] || '#0f0';
+    
+    const logEntry = document.createElement('div');
+    logEntry.style.color = colors;
+    logEntry.innerHTML = `<small>${prefix} [${timestamp}] ${message}</small>`;
+    liveLog.appendChild(logEntry);
+    
+    if (autoScrollEnabled) {
+        liveLog.scrollTop = liveLog.scrollHeight;
+    }
+}
+
+function clearLiveLog() {
+    document.getElementById('liveLog').innerHTML = '<small class="text-muted">[*] Log cleared</small>';
+}
+
+function pauseAutoScroll() {
+    autoScrollEnabled = !autoScrollEnabled;
+    const btn = event.target;
+    btn.textContent = autoScrollEnabled ? 'Pause' : 'Resume';
+    btn.classList.toggle('btn-outline-info');
+    btn.classList.toggle('btn-info');
+}
+
+function connectRecorderLogs(sessionId) {
+    // Connect to WebSocket for live logs
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = io(null, { secure: true });
+    
+    socket.on('recorder_log', (data) => {
+        appendLog(data.message, data.type || 'info');
+    });
+    
+    socket.on('form_detected', (data) => {
+        document.getElementById('detailForms').textContent = data.count || '-';
+        appendLog(`Form detected: ${data.form_name || 'Unknown'} with ${data.field_count || 0} fields`, 'form');
+    });
+    
+    socket.on('cookie_captured', (data) => {
+        document.getElementById('detailCookies').textContent = (parseInt(document.getElementById('detailCookies').textContent) || 0) + 1;
+        appendLog(`Cookie captured: ${data.name}`, 'cookie');
+    });
+    
+    socket.on('network_log', (data) => {
+        appendLog(`${data.method} ${data.url.substring(0, 80)}... -> ${data.status}`, 'network');
+    });
+    
+    socket.on('payload_injected', (data) => {
+        appendLog(`Payload injected: ${data.payload_type} (${data.target})`, 'payload');
+    });
+    
+    socket.on('recording_error', (data) => {
+        appendLog(`Error: ${data.message}`, 'error');
+    });
+}
+
 function selectRecorder(type) {
     document.getElementById('recordingType').value = type;
     document.getElementById('configPanel').style.display = 'block';
@@ -238,13 +331,21 @@ function startRecording(event) {
     // Show status panel
     document.getElementById('configPanel').style.display = 'none';
     document.getElementById('statusPanel').style.display = 'block';
+    clearLiveLog();
     
     // Update details
     document.getElementById('detailRecorder').textContent = data.type.toUpperCase();
     document.getElementById('detailUrl').innerHTML = '<code>' + data.url + '</code>';
     document.getElementById('detailHeadless').textContent = data.headless === 'true' ? 'Yes' : 'No';
+    document.getElementById('detailForms').textContent = '-';
+    document.getElementById('detailCookies').textContent = '-';
     
-    console.log('Starting recording:', data);
+    appendLog(`Starting ${data.type} recorder for: ${data.url}`, 'info');
+    appendLog(`Headless mode: ${data.headless === 'true' ? 'enabled' : 'disabled'}`, 'info');
+    appendLog(`Browser: ${data.browser}`, 'info');
+    
+    // Connect to live logs
+    connectRecorderLogs();
     
     // Send to backend
     fetch('/studio/recorder', {
@@ -253,12 +354,19 @@ function startRecording(event) {
         body: JSON.stringify(data)
     })
     .then(r => r.json())
-    .then(data => {
-        console.log('Recording response:', data);
-        document.getElementById('statusText').textContent = data.message || 'Recording completed';
+    .then(response => {
+        console.log('Recording response:', response);
+        if (response.status === 'ok') {
+            appendLog(`Recording completed successfully. Session ID: ${response.session_id || 'N/A'}`, 'success');
+            document.getElementById('statusText').textContent = response.message || 'Recording completed';
+        } else {
+            appendLog(`Recording failed: ${response.message || 'Unknown error'}`, 'error');
+            document.getElementById('statusText').innerHTML = '<span class="text-danger">Error: ' + (response.message || 'Unknown error') + '</span>';
+        }
     })
     .catch(e => {
         console.error('Error:', e);
+        appendLog(`Error: ${e.message}`, 'error');
         document.getElementById('statusText').innerHTML = '<span class="text-danger">Error: ' + e.message + '</span>';
     });
 }

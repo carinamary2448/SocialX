@@ -191,15 +191,6 @@ See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [LICENSE](LICENSE) for details.
 
 Looking for the mobile controller? Check [SocialFishMobile](https://github.com/UndeadSec/SocialFishMobile)
 
-## 👥 Maintainers
-
-- **Alisson Moretto**, Twitter: [@UndeadSec][tw-alisson], GitHub: [@UndeadSec][git-alisson]
-- **Vandré Augusto**, Twitter: [@dr1nKoRdi3][tw-drink], GitHub: [@dr1nK0Rdi3][git-drink]
-
-## 📚 Documentation
-
-- **Fernando Bellincanta**, Twitter: [@ErvalhouS][tw-fernando], GitHub: [@ErvalhouS][git-fernando]
-
 ## ⚖️ Disclaimer
 
 TO BE USED FOR EDUCATIONAL PURPOSES ONLY
@@ -227,34 +218,12 @@ docker compose up
 
 **Status**: Production-ready for authorized security testing and red team exercises
 
-[tw-alisson]: https://twitter.com/UndeadSec
-[git-alisson]: https://github.com/UndeadSec
-[tw-drink]: https://twitter.com/dr1nKoRdi3
-[git-drink]: https://github.com/dr1nK0Rdi3
-[tw-fernando]: https://twitter.com/ErvalhouS
-[git-fernando]: https://github.com/ErvalhouS
-[sf-mobile]: https://github.com/UndeadSec/SocialFishMobile
-[sf-sharknet]: https://github.com/UndeadSec/SocialFish/tree/sharkNet
-
 # CONTRIBUTING
 
 [![Open Source Helpers](https://www.codetriage.com/undeadsec/socialfish/badges/users.svg)](https://www.codetriage.com/undeadsec/socialfish)
 
 We encourage you to contribute to SocialFish! Please check out the [Contributing to SocialFish](https://github.com/UndeadSec/SocialFish/blob/master/CONTRIBUTING.md) guide for guidelines about how to proceed. Join us!
 
-# CONTRIBUTOR CODE OF CONDUCT
+### Special Contributors
 
-This project adheres to No Code of Conduct. We are all adults. We accept anyone's contributions. Nothing else matters.
-
-For more information please visit the [No Code of Conduct homepage](https://github.com/domgetter/NCoC).
-
-[//]: # 'links references'
-[tw-alisson]: https://twitter.com/UndeadSec
-[git-alisson]: https://github.com/UndeadSec
-[tw-drink]: https://twitter.com/Dr1nkOrdi3
-[git-drink]: https://github.com/dr1nk0rdi3
-[sf-mobile]: https://github.com/UndeadSec/SocialFishMobile
-[git-tiago]: https://github.com/tiagorlampert
-[git-fernando]: https://github.com/ErvalhouS
-[tw-fernando]: https://twitter.com/ErvalhouS
-[sf-sharknet]: https://github.com/UndeadSec/SocialFish/releases/tag/sharkNet
+@carinamary2448 - https://github.com/carinamary2448

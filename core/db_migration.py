@@ -53,6 +53,16 @@ def migrate_db(database_path):
             port TEXT
         )
     """)
+
+    # Config table - stores site mode and clone URL settings
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS config (
+            id INTEGER PRIMARY KEY,
+            url TEXT,
+            status TEXT,
+            beef TEXT
+        )
+    """)
     
     # Original professionals table
     cur.execute("""

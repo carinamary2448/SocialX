@@ -29,6 +29,7 @@ class MockLoginServer:
         self.users = self._generate_mock_users(10)
         self.tokens = {}
         self.auth_flows = {}
+        self.password_salt = secrets.token_hex(16)  # Store salt for consistent hashing in demo
         
         # Register routes
         self._register_routes()
@@ -52,8 +53,18 @@ class MockLoginServer:
         return users
     
     def _hash_password(self, password: str) -> str:
-        """Hash password"""
-        return hashlib.sha256(password.encode()).hexdigest()
+        """Hash password with salt using PBKDF2"""
+        # For mock server: use PBKDF2 which is more secure than plain SHA256
+        import hashlib
+        try:
+            # Try to use PBKDF2 (Python 3.7+)
+            hashed = hashlib.pbkdf2_hmac('sha256', password.encode(), 
+                                        self.password_salt.encode(), 100000)
+            return hashed.hex()
+        except:
+            # Fallback to salted SHA256 for compatibility
+            salted = f"{self.password_salt}{password}"
+            return hashlib.sha256(salted.encode()).hexdigest()
     
     def _generate_token(self, user_id: str, token_type='access') -> str:
         """Generate JWT-like token"""
